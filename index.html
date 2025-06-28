@@ -77,6 +77,29 @@
         height: auto;
         display: block;
       }
+      .remove-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        border: 1px solid #ccc;
+        background-color: red;
+        color: #333;
+        font-size: 18px;
+        line-height: 26px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        padding: 0 0 !important;
+      }
+
+      .remove-btn:hover {
+        background-color: #eee;
+        border-color: #888;
+      }
+
       .modal {
         display: none;
         position: fixed;
@@ -151,20 +174,19 @@
 
             let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
             let data = imageData.data;
-
             const threshold = 240;
+
             for (let i = 0; i < data.length; i += 4) {
               let r = data[i],
                 g = data[i + 1],
                 b = data[i + 2];
               if (r > threshold && g > threshold && b > threshold) {
-                data[i + 3] = 0; // alpha = 0
+                data[i + 3] = 0;
               }
             }
             tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
             tempCtx.putImageData(imageData, 0, 0);
 
-            // Tìm minY, maxY
             let minY = img.height,
               maxY = 0;
             for (let y = 0; y < img.height; y++) {
@@ -179,7 +201,6 @@
             const realHeight = maxY - minY;
             const targetHeight = 1500;
             const scaleFactor = targetHeight / realHeight;
-
             const newWidth = Math.round(img.width * scaleFactor);
             const newHeight = Math.round(img.height * scaleFactor);
 
@@ -187,20 +208,32 @@
             const ctx = canvas.getContext("2d");
             canvas.width = 2000;
             canvas.height = 2000;
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             const x = (canvas.width - newWidth) / 2;
             const y = (canvas.height - targetHeight) / 2 - minY * scaleFactor;
-
             ctx.drawImage(tempCanvas, x, y, newWidth, newHeight);
 
+            const finalName =
+              (file.name ? file.name.replace(/\.[^/.]+$/, "") : "pasted") +
+              ".png";
             const url = canvas.toDataURL("image/png");
-            processedImages.push({ name: file.name || "pasted.png", url });
+
+            const item = { name: finalName, url };
+            processedImages.push(item);
 
             const wrapper = document.createElement("div");
             wrapper.className = "image-wrapper";
-            wrapper.innerHTML = `<img src="${url}" alt="Processed"/>`;
+            wrapper.innerHTML = `
+          <button class="remove-btn" title="Xoá ảnh">&times;</button>
+          <img src="${url}" alt="Processed"/>
+        `;
+            wrapper.querySelector(".remove-btn").onclick = (e) => {
+              e.stopPropagation();
+              processedImages = processedImages.filter((i) => i !== item);
+              wrapper.remove();
+            };
             wrapper.onclick = () => {
               zoomedImage.src = url;
               zoomModal.style.display = "flex";
