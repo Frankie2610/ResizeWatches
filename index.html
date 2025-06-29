@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Watch Image Processor</title>
+    <title>Resize L&M Watch Images</title>
     <style>
       body {
         font-family: "Segoe UI", sans-serif;
@@ -26,7 +26,7 @@
       input[type="file"] {
         padding: 10px 18px;
         border: 2px solid #333;
-        border-radius: 6px;
+        border-radius: 8px;
         background-color: #fff;
         font-size: 16px;
         cursor: pointer;
@@ -35,20 +35,23 @@
       }
       input[type="file"]:hover {
         border-color: #000;
+        background-color: #f0f0f0;
       }
       button {
-        padding: 10px 20px;
+        padding: 12px 26px;
         font-size: 16px;
         background-color: #222;
         color: #fff;
         border: none;
-        border-radius: 6px;
+        border-radius: 8px;
         cursor: pointer;
-        transition: background-color 0.3s;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s;
         margin-top: 10px;
       }
       button:hover {
         background-color: #444;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2);
       }
       .notice {
         font-size: 14px;
@@ -64,13 +67,15 @@
       .image-wrapper {
         position: relative;
         overflow: hidden;
-        border-radius: 8px;
-        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
-        cursor: pointer;
-        transition: transform 0.3s;
+        border-radius: 10px;
+        box-shadow: 0 3px 14px rgba(0, 0, 0, 0.12);
+        transition: transform 0.3s, box-shadow 0.3s;
+        background: #fff;
+        padding-bottom: 50px;
       }
       .image-wrapper:hover {
-        transform: scale(1.02);
+        transform: scale(1.03);
+        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
       }
       .image-wrapper img {
         width: 100%;
@@ -81,25 +86,39 @@
         position: absolute;
         top: 8px;
         right: 8px;
-        width: 28px;
-        height: 28px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
-        border: 1px solid #ccc;
-        background-color: red;
-        color: #333;
-        font-size: 18px;
-        line-height: 26px;
+        border: none;
+        background-color: #ff5555;
+        color: #fff;
+        font-size: 20px;
+        line-height: 30px;
         text-align: center;
         cursor: pointer;
-        transition: all 0.25s ease;
-        padding: 0 0 !important;
+        transition: background-color 0.25s;
+        padding: 0px !important;
       }
-
       .remove-btn:hover {
-        background-color: #eee;
-        border-color: #888;
+        background-color: #ff2222;
       }
-
+      .download-single {
+        position: absolute;
+        bottom: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #333;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.25s;
+      }
+      .download-single:hover {
+        background: #555;
+      }
       .modal {
         display: none;
         position: fixed;
@@ -115,13 +134,28 @@
       .modal img {
         max-width: 95%;
         max-height: 95%;
-        border-radius: 6px;
+        border-radius: 8px;
       }
       .footer-note {
         text-align: center;
         margin-top: 40px;
         font-size: 14px;
         color: #888;
+      }
+      .overlay-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+        font-size: 22px;
+        color: #333;
+        display: none;
       }
     </style>
   </head>
@@ -138,13 +172,18 @@
     <div class="modal" id="zoomModal" onclick="this.style.display='none'">
       <img id="zoomedImage" src="" alt="Zoomed" />
     </div>
+    <div class="overlay-loading" id="loadingOverlay">
+      Đang xử lý, vui lòng chờ...
+    </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script>
       const fileInput = document.getElementById("fileInput");
       const preview = document.getElementById("preview");
       const zoomModal = document.getElementById("zoomModal");
       const zoomedImage = document.getElementById("zoomedImage");
+      const loadingOverlay = document.getElementById("loadingOverlay");
       let processedImages = [];
 
       fileInput.addEventListener("change", () => {
@@ -165,7 +204,7 @@
         const reader = new FileReader();
         reader.onload = (event) => {
           const img = new Image();
-          img.onload = () => {
+          img.onload = async () => {
             const tempCanvas = document.createElement("canvas");
             const tempCtx = tempCanvas.getContext("2d");
             tempCanvas.width = img.width;
@@ -175,67 +214,86 @@
             let imageData = tempCtx.getImageData(0, 0, img.width, img.height);
             let data = imageData.data;
             const threshold = 240;
-
             for (let i = 0; i < data.length; i += 4) {
               let r = data[i],
                 g = data[i + 1],
                 b = data[i + 2];
-              if (r > threshold && g > threshold && b > threshold) {
+              if (r > threshold && g > threshold && b > threshold)
                 data[i + 3] = 0;
-              }
             }
-            tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
             tempCtx.putImageData(imageData, 0, 0);
 
             let minY = img.height,
               maxY = 0;
             for (let y = 0; y < img.height; y++) {
               for (let x = 0; x < img.width; x++) {
-                const index = (y * img.width + x) * 4 + 3;
+                let index = (y * img.width + x) * 4 + 3;
                 if (data[index] > 10) {
                   if (y < minY) minY = y;
                   if (y > maxY) maxY = y;
                 }
               }
             }
-            const realHeight = maxY - minY;
+            const realHeight = maxY - minY || 1;
             const targetHeight = 1500;
             const scaleFactor = targetHeight / realHeight;
             const newWidth = Math.round(img.width * scaleFactor);
-            const newHeight = Math.round(img.height * scaleFactor);
 
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
             canvas.width = 2000;
             canvas.height = 2000;
             ctx.fillStyle = "#fff";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            const x = (canvas.width - newWidth) / 2;
-            const y = (canvas.height - targetHeight) / 2 - minY * scaleFactor;
-            ctx.drawImage(tempCanvas, x, y, newWidth, newHeight);
+            ctx.fillRect(0, 0, 2000, 2000);
+            const x = (2000 - newWidth) / 2;
+            const y = (2000 - targetHeight) / 2 - minY * scaleFactor;
+            ctx.drawImage(
+              tempCanvas,
+              x,
+              y,
+              newWidth,
+              Math.round(img.height * scaleFactor)
+            );
 
             const finalName =
-              (file.name ? file.name.replace(/\.[^/.]+$/, "") : "pasted") +
-              ".png";
-            const url = canvas.toDataURL("image/png");
+              (file?.name?.replace(/\.[^/.]+$/, "") || "pasted") + ".png";
+            const blob = await new Promise((resolve) =>
+              canvas.toBlob(resolve, "image/png")
+            );
 
-            const item = { name: finalName, url };
-            processedImages.push(item);
+            // Chuyển blob sang Uint8Array buffer
+            const arrayBuffer = await blob.arrayBuffer();
+            const buffer = new Uint8Array(arrayBuffer);
 
+            processedImages.push({ name: finalName, buffer });
+
+            // UI
             const wrapper = document.createElement("div");
             wrapper.className = "image-wrapper";
             wrapper.innerHTML = `
           <button class="remove-btn" title="Xoá ảnh">&times;</button>
-          <img src="${url}" alt="Processed"/>
-        `;
+          <img src="${URL.createObjectURL(blob)}" alt="Processed"/>
+          <button class="download-single">Tải ảnh</button>`;
             wrapper.querySelector(".remove-btn").onclick = (e) => {
               e.stopPropagation();
-              processedImages = processedImages.filter((i) => i !== item);
+              processedImages = processedImages.filter(
+                (i) => i.buffer !== buffer
+              );
               wrapper.remove();
             };
+            wrapper.querySelector(".download-single").onclick = (e) => {
+              e.stopPropagation();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(
+                new Blob([buffer], { type: "image/png" })
+              );
+              a.download = finalName;
+              a.click();
+            };
             wrapper.onclick = () => {
-              zoomedImage.src = url;
+              zoomedImage.src = URL.createObjectURL(
+                new Blob([buffer], { type: "image/png" })
+              );
               zoomModal.style.display = "flex";
             };
             preview.appendChild(wrapper);
@@ -245,26 +303,23 @@
         reader.readAsDataURL(file);
       }
 
-      function downloadAll() {
+      async function downloadAll() {
         if (processedImages.length === 0) {
           alert("Chưa có ảnh nào để tải.");
           return;
         }
+        loadingOverlay.style.display = "flex";
         const zip = new JSZip();
         const folder = zip.folder("Processed_Watch_Images");
-        const promises = processedImages.map(({ name, url }) =>
-          fetch(url)
-            .then((res) => res.blob())
-            .then((blob) => folder.file(name, blob))
-        );
-        Promise.all(promises).then(() => {
-          zip.generateAsync({ type: "blob" }).then((content) => {
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(content);
-            a.download = "Processed_Watch_Images.zip";
-            a.click();
-          });
+        processedImages.forEach(({ name, buffer }) => {
+          folder.file(name, buffer);
         });
+        const content = await zip.generateAsync({ type: "blob" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(content);
+        a.download = "Processed_Watch_Images.zip";
+        a.click();
+        loadingOverlay.style.display = "none";
       }
     </script>
   </body>
