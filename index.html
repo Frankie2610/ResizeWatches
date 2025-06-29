@@ -177,7 +177,6 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script>
       const fileInput = document.getElementById("fileInput");
       const preview = document.getElementById("preview");
@@ -204,7 +203,7 @@
         const reader = new FileReader();
         reader.onload = (event) => {
           const img = new Image();
-          img.onload = async () => {
+          img.onload = () => {
             const tempCanvas = document.createElement("canvas");
             const tempCtx = tempCanvas.getContext("2d");
             tempCanvas.width = img.width;
@@ -238,6 +237,7 @@
             const targetHeight = 1500;
             const scaleFactor = targetHeight / realHeight;
             const newWidth = Math.round(img.width * scaleFactor);
+            const newHeight = Math.round(img.height * scaleFactor);
 
             const canvas = document.createElement("canvas");
             const ctx = canvas.getContext("2d");
@@ -245,65 +245,50 @@
             canvas.height = 2000;
             ctx.fillStyle = "#fff";
             ctx.fillRect(0, 0, 2000, 2000);
+
             const x = (2000 - newWidth) / 2;
             const y = (2000 - targetHeight) / 2 - minY * scaleFactor;
-            ctx.drawImage(
-              tempCanvas,
-              x,
-              y,
-              newWidth,
-              Math.round(img.height * scaleFactor)
-            );
+            ctx.drawImage(tempCanvas, x, y, newWidth, newHeight);
 
-            const finalName =
-              (file?.name?.replace(/\.[^/.]+$/, "") || "pasted") + ".png";
-            const blob = await new Promise((resolve) =>
-              canvas.toBlob(resolve, "image/png")
-            );
+            canvas.toBlob((blob) => {
+              const index = processedImages.length + 1;
+              const finalName = `image${index}.png`;
+              processedImages.push({ name: finalName, blob });
 
-            // Chuyển blob sang Uint8Array buffer
-            const arrayBuffer = await blob.arrayBuffer();
-            const buffer = new Uint8Array(arrayBuffer);
-
-            processedImages.push({ name: finalName, buffer });
-
-            // UI
-            const wrapper = document.createElement("div");
-            wrapper.className = "image-wrapper";
-            wrapper.innerHTML = `
-          <button class="remove-btn" title="Xoá ảnh">&times;</button>
-          <img src="${URL.createObjectURL(blob)}" alt="Processed"/>
-          <button class="download-single">Tải ảnh</button>`;
-            wrapper.querySelector(".remove-btn").onclick = (e) => {
-              e.stopPropagation();
-              processedImages = processedImages.filter(
-                (i) => i.buffer !== buffer
-              );
-              wrapper.remove();
-            };
-            wrapper.querySelector(".download-single").onclick = (e) => {
-              e.stopPropagation();
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(
-                new Blob([buffer], { type: "image/png" })
-              );
-              a.download = finalName;
-              a.click();
-            };
-            wrapper.onclick = () => {
-              zoomedImage.src = URL.createObjectURL(
-                new Blob([buffer], { type: "image/png" })
-              );
-              zoomModal.style.display = "flex";
-            };
-            preview.appendChild(wrapper);
+              const wrapper = document.createElement("div");
+              wrapper.className = "image-wrapper";
+              wrapper.innerHTML = `
+              <button class="remove-btn" title="Xoá ảnh">&times;</button>
+              <img src="${URL.createObjectURL(blob)}" alt="Processed"/>
+              <button class="download-single">Tải ảnh</button>
+            `;
+              wrapper.querySelector(".remove-btn").onclick = (e) => {
+                e.stopPropagation();
+                processedImages = processedImages.filter(
+                  (i) => i.blob !== blob
+                );
+                wrapper.remove();
+              };
+              wrapper.querySelector(".download-single").onclick = (e) => {
+                e.stopPropagation();
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob);
+                a.download = finalName;
+                a.click();
+              };
+              wrapper.onclick = () => {
+                zoomedImage.src = URL.createObjectURL(blob);
+                zoomModal.style.display = "flex";
+              };
+              preview.appendChild(wrapper);
+            }, "image/png");
           };
           img.src = event.target.result;
         };
         reader.readAsDataURL(file);
       }
 
-      async function downloadAll() {
+      function downloadAll() {
         if (processedImages.length === 0) {
           alert("Chưa có ảnh nào để tải.");
           return;
@@ -311,15 +296,16 @@
         loadingOverlay.style.display = "flex";
         const zip = new JSZip();
         const folder = zip.folder("Processed_Watch_Images");
-        processedImages.forEach(({ name, buffer }) => {
-          folder.file(name, buffer);
+        processedImages.forEach(({ name, blob }) => {
+          folder.file(name, blob);
         });
-        const content = await zip.generateAsync({ type: "blob" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(content);
-        a.download = "Processed_Watch_Images.zip";
-        a.click();
-        loadingOverlay.style.display = "none";
+        zip.generateAsync({ type: "blob" }).then((content) => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(content);
+          a.download = "Processed_Watch_Images.zip";
+          a.click();
+          loadingOverlay.style.display = "none";
+        });
       }
     </script>
   </body>
